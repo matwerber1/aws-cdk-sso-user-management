@@ -32,4 +32,65 @@ This project assumes you've already set up AWS SSO with IAM Identity Center and 
     });
     ```
 
-5. When you first deploy your project, `cdk.json` will be created with context about your environment. This file is in .gitignore because this is a demo project. Remember to add and commit `cdk.json` in a real project (should not be committed in public repos).
+5. Edit `./lib/org-sso-stack.ts` to your heart's content. Here's an example:
+
+    ```ts
+    export class SsoConfigurationStack extends cdk.Stack {
+    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+        super(scope, id, props);
+
+        cdk.Tags.of(scope).add("cdk-project", "demo of user management with SSO");
+
+        const readOnlySsoGroup = new identitystore.CfnGroup(
+        this,
+        "ReadOnlySsoGroup",
+        {
+            displayName: "Read-only",
+            description: "Read-only group for demo CDK project",
+            identityStoreId: orgConfig.sso.identityStoreId,
+        },
+        );
+
+        const readOnlySsoPermissionSet = new sso.CfnPermissionSet(
+        this,
+        "ReadOnlySsoPermissionSet",
+        {
+            instanceArn: orgConfig.sso.instanceArn,
+            name: "ReadOnlyAccess",
+            description: "Demo permission set for read-only access",
+            inlinePolicy: new iam.PolicyDocument({
+            statements: [
+                new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ["ec2:List*", "ecy2:Describe*"],
+                resources: ["*"],
+                }),
+            ],
+            }),
+            sessionDuration: "PT1H", // ISO-8601 format
+        },
+        );
+
+        new customSso.SsoUser(this, "SsoUserForSomeUser", {
+        retainUserIfStackDeleted: false,
+        userAttributes: {
+            userName: "someuser@example.com",
+            firstName: "Jane",
+            lastName: "Smith",
+            title: "Engineer",
+        },
+        groups: [readOnlySsoGroup],
+        });
+
+        new customSso.SsoGroupAssignment(this,`SsoGroupAssignment_ReadOnlyGroup`,{
+        ssoGroup: readOnlySsoGroup,
+        ssoPermissionSet: readOnlySsoPermissionSet,
+        accountId: orgConfig.accounts.sandbox,
+        });
+    }
+    }
+    ```
+
+6. Deploy your project: `cdk deploy`
+
+7. When you first deploy your project, `cdk.json` will be created with context about your environment. This file is in .gitignore because this is a demo project. Remember to add and commit `cdk.json` in a real project (should not be committed in public repos).
