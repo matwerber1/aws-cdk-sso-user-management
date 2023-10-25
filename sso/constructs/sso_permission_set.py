@@ -89,7 +89,7 @@ class SsoPermissionSet(Construct):
     #     for account_id in account_ids:
     #         self.grantToUserForAccount(group, account_id)
 
-    def grantToUserForAccount(self, user: SsoUser, account_id: str):
+    def grant_to_user_for_account(self, user: SsoUser, account_id: str):
         """
         Assign a permission set to a specific user for a specific account.
         Best practice is to use group-based access over individual user assignments.
@@ -110,6 +110,6 @@ class SsoPermissionSet(Construct):
             target_type="AWS_ACCOUNT",
         )
 
-    def grantToUserForAccounts(self, user: SsoUser, account_ids: list[str]):
+    def grant_to_user_for_accounts(self, user: SsoUser, account_ids: list[str]):
         for account_id in account_ids:
-            self.grantToUserForAccount(user, account_id)
+            self.grant_to_user_for_account(user, account_id)
