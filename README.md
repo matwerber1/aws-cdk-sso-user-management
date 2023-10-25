@@ -1,96 +1,82 @@
-# AWS CDK SSO User Management Example
+# AWS CDK SSO Stack
 
-This repo contains a lightweight example custom CloudFormation resource that uses AWS identitystore APIs to create, update, and delete SSO users.
+This is an example AWS CDK stack in Python that demonstrates the management of AWS SSO users, groups, permission sets, and account assignments entirely within the CDK.
 
-This project assumes you've already set up AWS SSO with IAM Identity Center and that IAM identity center is acting as your identity provider (IdP).
+I have an early first-attempt in Typescript available in the `typescript-old` branch of this repo, though I think the 2nd pass in Python in this `main` branch is a better overall solution.
 
-## Quick start
+## Key features
 
-1. Install dependencies: `npm install`
+- **Support for AWS SSO Users** Custom CloudFormation Resource for creating, updating, and deleting AWS SSO users (as of this writing, CloudFormation doesn't offer native support; the AWS SSO create-user/update-user SDK/CLI commands aren't well-documented, so this is a big time saver)
 
-2. Add configuration to `./lib/org-config.template.ts`:
+  - I've only added support for username, first name, last name, and email
+  - only supports SSO when AWS Identity Center is acting as your identity provider. I imagine that solution would also work with little to no modification if you're using an external identity provider without SCIM, but I'm not sure.
 
-   * `identityStoreId` and `instanceArn` available using AWS CLI for your organization management account: `aws sso-admin list-instances | jq '.Instances[0]'`
+- **Support for AWS SSO groups, users, and permission sets created outide of this CDK app** - very handy when, for example, you have existing SSO groups and permission sets created by AWS Control Tower
 
-   * SSO allows string usernames. If you want usernames to be email addresses, set `requireUsernameAsEmail: true`. If you require email addresses, use `allowedEmailDomains: []` to specify which domains they can come from. This will only be enforced when using the custom construct in this project. It won't stop an admin from creating users with whatever email or domain they want outside of the CDK.
+- **Helper methods** for 1/ adding a list of users to a group and 2/ assigning a given SSO group and permission set combination a list of accounts.
 
-   * `region` is the region in your management account where SSO has been set up. 
+## Quickstart
 
-   * populate the `accounts: {}` object with entries of `accountName: "<account_id>"`. The account name is arbitrary and just used as shorthand in this project; it does not need to match the actual account name configured in AWS.
+1. Clone repo
 
-3. rename `org-config.template.ts` to `org-config.ts`. Note - this file will be ignored in .gitignore to avoid committing within this demo project. If you use or adapt this in a private repo, you'd want to commit the file.
+2. Update [./sso/config.py](./sso/config.py) with the AWS Account ID of your AWS Organization and related SSO configuration info available from IAM Identity Center in your management account in the region where you've set up SSO. Optionally provide a list of AWS account IDs and nicknames that you want to use in this solution.
 
-4. Edit `./bin/app.template.ts` to deploy to your management account and region you've selected for AWS SSO and rename to `./bin/app.ts` (same note about gitignore as above):
+3. Update [./sso/sso_stack.py](./sso/sso_stack.py) to define the AWS SSO users, groups, permission sets, and assignments to your AWS accounts.
 
-    ```sh
-    new SsoConfigurationStack(app, "SsoStack", {
-    env: {
-        account: "<YOUR MANAGEMENT ACCOUNT ID>",
-        region: "<YOUR REGION WHERE AWS SSO / IDENTITY CENTER CREATED>",
-    },
-    stackName: "cdk-organization-sso",
-    });
-    ```
+4. Follow the "Default CDK instructions" below, run `cdk deploy`, and - hopefully - enjoy the results :)
 
-5. Edit `./lib/org-sso-stack.ts` to your heart's content. Here's an example:
+## Default CDK Instructions
 
-    ```ts
-    export class SsoConfigurationStack extends cdk.Stack {
-    constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-        super(scope, id, props);
+The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
-        cdk.Tags.of(scope).add("cdk-project", "demo of user management with SSO");
+This project is set up like a standard Python project. The initialization
+process also creates a virtualenv within this project, stored under the `.venv`
+directory. To create the virtualenv it assumes that there is a `python3`
+(or `python` for Windows) executable in your path with access to the `venv`
+package. If for any reason the automatic creation of the virtualenv fails,
+you can create the virtualenv manually.
 
-        const readOnlySsoGroup = new identitystore.CfnGroup(
-        this,
-        "ReadOnlySsoGroup",
-        {
-            displayName: "Read-only",
-            description: "Read-only group for demo CDK project",
-            identityStoreId: orgConfig.sso.identityStoreId,
-        },
-        );
+To manually create a virtualenv on MacOS and Linux:
 
-        const readOnlySsoPermissionSet = new sso.CfnPermissionSet(
-        this,
-        "ReadOnlySsoPermissionSet",
-        {
-            instanceArn: orgConfig.sso.instanceArn,
-            name: "ReadOnlyAccess",
-            description: "Demo permission set for read-only access",
-            inlinePolicy: new iam.PolicyDocument({
-            statements: [
-                new iam.PolicyStatement({
-                effect: iam.Effect.ALLOW,
-                actions: ["ec2:List*", "ecy2:Describe*"],
-                resources: ["*"],
-                }),
-            ],
-            }),
-            sessionDuration: "PT1H", // ISO-8601 format
-        },
-        );
+```sh
+python3 -m venv .venv
+```
 
-        new customSso.SsoUser(this, "SsoUserForSomeUser", {
-        retainUserIfStackDeleted: false,
-        userAttributes: {
-            userName: "someuser@example.com",
-            firstName: "Jane",
-            lastName: "Smith",
-            title: "Engineer",
-        },
-        groups: [readOnlySsoGroup],
-        });
+After the init process completes and the virtualenv is created, you can use the following
+step to activate your virtualenv.
 
-        new customSso.SsoGroupAssignment(this,`SsoGroupAssignment_ReadOnlyGroup`,{
-        ssoGroup: readOnlySsoGroup,
-        ssoPermissionSet: readOnlySsoPermissionSet,
-        accountId: orgConfig.accounts.sandbox,
-        });
-    }
-    }
-    ```
+```sh
+source .venv/bin/activate
+```
 
-6. Deploy your project: `cdk deploy`
+If you are a Windows platform, you would activate the virtualenv like this:
 
-7. When you first deploy your project, `cdk.json` will be created with context about your environment. This file is in .gitignore because this is a demo project. Remember to add and commit `cdk.json` in a real project (should not be committed in public repos).
+```sh
+% .venv\Scripts\activate.bat
+```
+
+Once the virtualenv is activated, you can install the required dependencies.
+
+```sh
+pip install -r requirements.txt
+```
+
+At this point you can now synthesize the CloudFormation template for this code.
+
+```sh
+cdk synth
+```
+
+To add additional dependencies, for example other CDK libraries, just add
+them to your `setup.py` file and rerun the `pip install -r requirements.txt`
+command.
+
+## Useful commands
+
+- `cdk ls` list all stacks in the app
+- `cdk synth` emits the synthesized CloudFormation template
+- `cdk deploy` deploy this stack to your default AWS account/region
+- `cdk diff` compare deployed stack with current state
+- `cdk docs` open CDK documentation
+
+Enjoy!
