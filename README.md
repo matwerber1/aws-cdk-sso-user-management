@@ -76,27 +76,6 @@ class SsoStack(Stack):
         demo_permission_set.grant_to_group_for_account(demo_group, AwsAccounts.SANDBOX.value)
 ```
 
-## Key features
-
-### Support for AWS SSO Users
-
-This is the big win (for me, at least!). As of this writing, CloudFormation doesn't offer native support for creating, updating, or deleting SSO users. On top of that, I found their `aws identitystore update-user` CLI and SDK docs... lacking... it was painful figuring out some of the quirks, primarily with the update-user API. This solution provides a custom CDK resource in the form of a Lambda function that wraps up my lessons learned and lets you use infra-as-code for SSO users.
-
-> **Notes:**
->
-> - I've only added support for username, first name, last name, and email
-> - only supports SSO when AWS Identity Center is acting as your identity provider. I imagine that solution would also work with little to no modification if you're using an external identity provider without SCIM, but I'm not sure.
-
-### Support for existing AWS SSO resources
-
-Solution supports using existing SSO groups and permission sets.
-
-There's also support for "importing" an existing AWS SSO user (see the custom resource Lambda code's 'create_user' method to learn more).
-
-### Helper methods to reduce repetitive work
-
-The native CloudFormation resources and CDK constructs for adding users to groups or adding a group to multiple accounts is tedious, as each one of these user-group or group-account-permissionset combinations is its own CloudFormation/CDK resource. I added some helper methods to abstract a lot of this away.
-
 ## Available constructs and methods
 
 ### SsoUser
