@@ -1,7 +1,6 @@
 from typing import Any
 
 from aws_cdk import Aspects, Stack, Tags
-from aws_cdk.aws_sso import CfnPermissionSetProps
 from aws_cdk import aws_iam as iam
 from cdk_nag import AwsSolutionsChecks
 from constructs import Construct
