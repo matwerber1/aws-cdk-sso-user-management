@@ -32,7 +32,7 @@ class SsoStack(Stack):
 
         all_users = [user_foo, user_bar]
 
-        # Reference existing perission sets
+        # Support for using existing perission sets
         SsoPermissionSet.from_existing_permission_set(
             self,
             permission_set_name="AWSOrganizationsFullAccess",
@@ -55,11 +55,18 @@ class SsoStack(Stack):
             ).to_string()
         )
 
+        # Support for using existing SSO groups
+        ctt_account_factory_group = SsoGroup.from_existing_group(
+            self,
+            group_name="AWSAccountFactory",
+            group_id="xxxx-xxxx-xxx-xxxx-xxxxxxxx",
+        )
+
         # Create new groups
         demo_group = SsoGroup(
             self,
             group_name="Demo User Group",
-            description="Admin and read-only role to sandbox account",
+            description="Users can list buckets in our sandbox account",
         )
 
         # add user(s) to a group
@@ -89,6 +96,42 @@ There's also support for "importing" an existing AWS SSO user (see the custom re
 ### Helper methods to reduce repetitive work
 
 The native CloudFormation resources and CDK constructs for adding users to groups or adding a group to multiple accounts is tedious, as each one of these user-group or group-account-permissionset combinations is its own CloudFormation/CDK resource. I added some helper methods to abstract a lot of this away.
+
+## Available constructs and methods
+
+### SsoUser
+
+Uses AWS `identitystore` APIs in a custom CloudFormation resource to create, update, and delete existing SSO users.
+
+Within the Lambda function ([lambda_functions/sso_user/index.py](sso/constructs/lambda_functions/sso_user/index.py)) source code, you can further customize behavior using the following configuration variables:
+
+- `ALLOW_CREATE_REQUEST_TO_IMPORT_EXISTING_USER [default=True]` - supports "importing" an existing SSO user by creating an instance of `SSOUser` with a username, first name, last name, and email address that is identical to an existing user.
+
+- `ALLOW_DELETE_USERS [default=False]` - If an `SsoUser` declaration is removed or the stack is deleted, this value determines whether the SSO user will actually be deleted. Default value is `False` to err on the side of caution. Perhaps adding a per-user `retention_policy` setting to the SsoUser constructor properties and passing it's value to the Lambda function for each user would be better (it'd certainly be more in-line with typical CloudFormation & CDK)... but I opted for the current approach because - at least in my environment - there aren't many users, they should never be deleted (at least, not in any forseeable future), and I didn't want to risk an inadvertent mistake or stack deletion suddenly locking everyone out.
+
+`RETURN_DELETE_SUCCESS_EVEN_IF_DELETE_NOT_ALLOWED [default=True]` - If an SsoUser is removed from a stack but `ALLOW_DELETE_USERS=False`, should we fail the stack update or allow it to proceed? Similar to above, maybe a better approach is to use a per-user `retention_policy` setting.
+
+### SsoGroup
+
+Creates a new instance of an SSO Group from `aws_cdk.aws_identitystore.CfnGroup`, or allows you to create an SsoGroup from an existing group with `from_existing_group()`.
+
+Once you've created an SSOGroup, the following helper methods are available for the group:
+
+- `add_user()` - a convenience wrapper around `aws_cdk.aws_identitystore.CfnGroupMembership` that adds a single `SsoUser` to the group's membership.
+
+- `add_users()` - allows you to pass a list of `SsoUser` objects and adds each of them to the group.
+
+### SsoPermissionSet
+
+Creates a new instance of an SSO Permission Set from `aws_cdk.aws_identitystore.CfnPermissionSet`, or allows you to create an SsoPermissionSet from an existing group with `from_existing_group()`.
+
+Once you've created an SsoPermissionSet, the following helper methods are available for the permission set:
+
+- `grant_to_group_for_account()` - a convenience wrapper around `aws_cdk.aws_identitystore.CfnAssignment` that grants a single SsoGroup permission to use the SsoPermissionSet with a specific AWS account ID.
+
+- `grant_to_user_for_account()` - a convenience wrapper around `aws_cdk.aws_identitystore.CfnAssignment` that grants a single SsoUser permission to use the SsoPermissionSet with a specific AWS account ID.
+
+- `grant_to_user_for_accounts()` - accepts an SsoUser and list of AWS account IDs and gives the user permission to use the permission set for each of the accounts.
 
 ## Quickstart
 
