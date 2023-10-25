@@ -1,19 +1,94 @@
 # AWS CDK SSO Stack
 
-This is an example AWS CDK stack in Python that demonstrates the management of AWS SSO users, groups, permission sets, and account assignments entirely within the CDK.
+This is an example AWS CDK stack in Python that demonstrates the management of AWS SSO users, groups, permission sets, and account assignments entirely within the CDK. The big win is a custom resource for managing AWS SSO users, as those aren't yet natively supported by CloudFormation.
 
-I have an early first-attempt in Typescript available in the `typescript-old` branch of this repo, though I think the 2nd pass in Python in this `main` branch is a better overall solution.
+## What you get from this project
+
+In a nutshell, easy(?) AWS SSO management with CDK.
+
+```py
+class SsoStack(Stack):
+    def __init__(self, scope: Construct, construct_id: str, **kwargs: Any) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        user_foo = SsoUser(
+            self,
+            user_attributes=SsoUserAttributes(
+                email="someuser1@",
+                username="username",
+                first_name="Foo",
+                last_name="Foo",
+            ),
+        )
+        user_bar = SsoUser(
+            self,
+            user_attributes=SsoUserAttributes(
+                email="someuser2@",
+                username="username2",
+                first_name="Bar",
+                last_name="Bar",
+            ),
+        )
+
+        all_users = [user_foo, user_bar]
+
+        # Reference existing perission sets
+        SsoPermissionSet.from_existing_permission_set(
+            self,
+            permission_set_name="AWSOrganizationsFullAccess",
+            permission_set_arn=f"{SsoConfig.instance_arn.value}/ps-xxxxxxxxxxxxxx",
+        )
+
+        # Create new permission sets
+        demo_permission_set = SsoPermissionSet(
+            self,
+            name="DemoPermissionSet",
+            description="demo permission set",
+            inline_policy=iam.PolicyDocument(
+                statements=[
+                    iam.PolicyStatement(
+                        effect=iam.Effect.ALLOW,
+                        actions=["s3:ListAllMyBuckets"],
+                        resources=["*"],
+                    )
+                ]
+            ).to_string()
+        )
+
+        # Create new groups
+        demo_group = SsoGroup(
+            self,
+            group_name="Demo User Group",
+            description="Admin and read-only role to sandbox account",
+        )
+
+        # add user(s) to a group
+        demo_group.add_users(all_users)
+
+        # add permission set to a group for a given account
+        demo_permission_set.grant_to_group_for_account(demo_group, AwsAccounts.SANDBOX.value)
+```
 
 ## Key features
 
-- **Support for AWS SSO Users** Custom CloudFormation Resource for creating, updating, and deleting AWS SSO users (as of this writing, CloudFormation doesn't offer native support; the AWS SSO create-user/update-user SDK/CLI commands aren't well-documented, so this is a big time saver)
+### Support for AWS SSO Users
 
-  - I've only added support for username, first name, last name, and email
-  - only supports SSO when AWS Identity Center is acting as your identity provider. I imagine that solution would also work with little to no modification if you're using an external identity provider without SCIM, but I'm not sure.
+This is the big win (for me, at least!). As of this writing, CloudFormation doesn't offer native support for creating, updating, or deleting SSO users. On top of that, I found their `aws identitystore update-user` CLI and SDK docs... lacking... it was painful figuring out some of the quirks, primarily with the update-user API. This solution provides a custom CDK resource in the form of a Lambda function that wraps up my lessons learned and lets you use infra-as-code for SSO users.
 
-- **Support for AWS SSO groups, users, and permission sets created outide of this CDK app** - very handy when, for example, you have existing SSO groups and permission sets created by AWS Control Tower
+> **Notes:**
+>
+> - I've only added support for username, first name, last name, and email
+> - only supports SSO when AWS Identity Center is acting as your identity provider. I imagine that solution would also work with little to no modification if you're using an external identity provider without SCIM, but I'm not sure.
 
-- **Helper methods** for 1/ adding a list of users to a group and 2/ assigning a given SSO group and permission set combination a list of accounts.
+### Support for existing AWS SSO resources
+
+Solution supports using existing SSO groups and permission sets.
+
+There's also support for "importing" an existing AWS SSO user (see the custom resource Lambda code's 'create_user' method to learn more).
+
+### Helper methods to reduce repetitive work
+
+The native CloudFormation resources and CDK constructs for adding users to groups or adding a group to multiple accounts is tedious, as each one of these user-group or group-account-permissionset combinations is its own CloudFormation/CDK resource. I added some helper methods to abstract a lot of this away.
 
 ## Quickstart
 
